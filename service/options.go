@@ -4,9 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"time"
-
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/go-etcd/etcd"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
 )
 
 type Options struct {
@@ -19,15 +17,16 @@ type Options struct {
 	Interface string
 	CertPath  string
 
-	EtcdNodes       listOptions
-	EtcdKey         string
-	EtcdCaFile      string
-	EtcdCertFile    string
-	EtcdKeyFile     string
-	EtcdConsistency string
+	EtcdNodes               listOptions
+	EtcdKey                 string
+	EtcdCaFile              string
+	EtcdCertFile            string
+	EtcdKeyFile             string
+	EtcdConsistency         string
+	EtcdSyncIntervalSeconds int64
 
 	Log         string
-	LogSeverity severity
+	LogSeverity SeverityFlag
 
 	ServerReadTimeout    time.Duration
 	ServerWriteTimeout   time.Duration
@@ -40,28 +39,30 @@ type Options struct {
 
 	StatsdAddr   string
 	StatsdPrefix string
+
+	DefaultListener bool
 }
 
-type severity struct {
-	s log.Severity
+type SeverityFlag struct {
+	S log.Severity
 }
 
-func (s *severity) Get() interface{} {
-	return s.s.Get()
+func (s *SeverityFlag) Get() interface{} {
+	return &s.S
 }
 
 // Set is part of the flag.Value interface.
-func (s *severity) Set(value string) error {
+func (s *SeverityFlag) Set(value string) error {
 	out, err := log.SeverityFromString(value)
 	if err != nil {
 		return err
 	}
-	s.s = out
+	s.S = out
 	return nil
 }
 
-func (s *severity) String() string {
-	return s.s.String()
+func (s *SeverityFlag) String() string {
+	return s.S.String()
 }
 
 // Helper to parse options that can occur several times, e.g. cassandra nodes
@@ -98,7 +99,8 @@ func ParseCommandLine() (options Options, err error) {
 	flag.StringVar(&options.EtcdCaFile, "etcdCaFile", "", "Path to CA file for etcd communication")
 	flag.StringVar(&options.EtcdCertFile, "etcdCertFile", "", "Path to cert file for etcd communication")
 	flag.StringVar(&options.EtcdKeyFile, "etcdKeyFile", "", "Path to key file for etcd communication")
-	flag.StringVar(&options.EtcdConsistency, "etcdConsistency", etcd.STRONG_CONSISTENCY, "Etcd consistency")
+	flag.StringVar(&options.EtcdConsistency, "etcdConsistency", "STRONG", "Etcd consistency (STRONG or WEAK)")
+	flag.Int64Var(&options.EtcdSyncIntervalSeconds, "etcdSyncIntervalSeconds", 0, "Interval between updating etcd cluster information. Use 0 to disable any syncing (default behavior.)")
 	flag.StringVar(&options.PidPath, "pidPath", "", "Path to write PID file to")
 	flag.IntVar(&options.Port, "port", 8181, "Port to listen on")
 	flag.IntVar(&options.ApiPort, "apiPort", 8182, "Port to provide api on")
@@ -108,7 +110,7 @@ func ParseCommandLine() (options Options, err error) {
 	flag.StringVar(&options.CertPath, "certPath", "", "KeyPair to use (enables TLS)")
 	flag.StringVar(&options.Log, "log", "console", "Logging to use (syslog or console)")
 
-	options.LogSeverity.s = log.SeverityWarn
+	options.LogSeverity.S = log.SeverityWarning
 	flag.Var(&options.LogSeverity, "logSeverity", "logs at or above this level to the logging output")
 
 	flag.IntVar(&options.ServerMaxHeaderBytes, "serverMaxHeaderBytes", 1<<20, "Maximum size of request headers")
@@ -123,6 +125,8 @@ func ParseCommandLine() (options Options, err error) {
 
 	flag.StringVar(&options.StatsdPrefix, "statsdPrefix", "", "Statsd prefix will be appended to the metrics emitted by this instance")
 	flag.StringVar(&options.StatsdAddr, "statsdAddr", "", "Statsd address in form of 'host:port'")
+
+	flag.BoolVar(&options.DefaultListener, "default-listener", true, "Enables the default listener on startup (Default value: true)")
 
 	flag.Parse()
 	options, err = validateOptions(options)

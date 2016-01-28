@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/oxy/utils"
-	"github.com/mailgun/vulcand/plugin"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/vulcand/oxy/utils"
+	"github.com/vulcand/vulcand/plugin"
 )
 
 const Type = "rewrite"
@@ -65,6 +65,12 @@ func newRewriteHandler(next http.Handler, spec *Rewrite) (*rewriteHandler, error
 func (rw *rewriteHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	oldURL := rawURL(req)
 
+	// only continue if the Regexp param matches the URL
+	if !rw.regexp.MatchString(oldURL) {
+		rw.next.ServeHTTP(w, req)
+		return
+	}
+
 	// apply a rewrite regexp to the URL
 	newURL := rw.regexp.ReplaceAllString(oldURL, rw.replacement)
 
@@ -90,10 +96,7 @@ func (rw *rewriteHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	req.URL = parsedURL
 
 	// make sure the request URI corresponds the rewritten URL
-	req.RequestURI = req.URL.Path
-	if req.URL.RawQuery != "" {
-		req.RequestURI = strings.Join([]string{req.RequestURI, "?", req.URL.RawQuery}, "")
-	}
+	req.RequestURI = req.URL.RequestURI()
 
 	if !rw.rewriteBody {
 		rw.next.ServeHTTP(w, req)
@@ -156,10 +159,17 @@ func CliFlags() []cli.Flag {
 
 func rawURL(request *http.Request) string {
 	scheme := "http"
-	if request.TLS != nil {
+	if request.TLS != nil || isXForwardedHTTPS(request) {
 		scheme = "https"
 	}
+
 	return strings.Join([]string{scheme, "://", request.Host, request.RequestURI}, "")
+}
+
+func isXForwardedHTTPS(request *http.Request) bool {
+	xForwardedProto := request.Header.Get("X-Forwarded-Proto")
+
+	return len(xForwardedProto) > 0 && xForwardedProto == "https"
 }
 
 type redirectHandler struct {

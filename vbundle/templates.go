@@ -4,7 +4,7 @@ const mainTemplate = `package main
 
 import (
 	"fmt"
-	"github.com/mailgun/vulcand/service"
+	"github.com/vulcand/vulcand/service"
 	"{{.PackagePath}}/registry"
 	"os"
 )
@@ -27,7 +27,7 @@ func main() {
 const registryTemplate = `package registry
 
 import (
-	"github.com/mailgun/vulcand/plugin"
+	"github.com/vulcand/vulcand/plugin"
 	{{range .Packages}}
 	"{{.}}"
 	{{end}}
@@ -55,21 +55,25 @@ const vulcanctlTemplate = `package main
 
 import (
     "github.com/mailgun/log"
-	"github.com/mailgun/vulcand/vctl/command"
+	"github.com/vulcand/vulcand/vctl/command"
 	"{{.PackagePath}}/registry"
 	"os"
 )
 
-var vulcanUrl string
-
 func main() {
-	log.Init([]*log.LogConfig{&log.LogConfig{Name: "console"}})
-
-    r, err := registry.GetRegistry()
+	console, err := log.NewLogger(log.Config{"console", "info"})
 	if err != nil {
 		log.Errorf("Error: %s\n", err)
-        return
+		return
 	}
+	log.Init(console)
+
+	r, err := registry.GetRegistry()
+	if err != nil {
+		log.Errorf("Error: %s\n", err)
+		return
+	}
+
 	cmd := command.NewCommand(r)
 	if err := cmd.Run(os.Args); err != nil {
 		log.Errorf("Error: %s\n", err)

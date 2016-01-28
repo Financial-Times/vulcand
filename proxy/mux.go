@@ -7,13 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/stapler"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/router"
+	"github.com/vulcand/vulcand/stapler"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/metrics"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/route"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/timetools"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/metrics"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/timetools"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/vulcand/route"
 )
 
 // mux is capable of listening on multiple interfaces, graceful shutdowns and updating TLS certificates
@@ -40,7 +41,7 @@ type mux struct {
 	mtx *sync.RWMutex
 
 	// Router will be shared between mulitple listeners
-	router *route.Mux
+	router router.Router
 
 	// Current server stats
 	state muxState
@@ -71,7 +72,7 @@ func New(id int, st stapler.Stapler, o Options) (*mux, error) {
 
 		options: o,
 
-		router:      route.NewMux(),
+		router:      o.Router,
 		connTracker: newConnTracker(),
 
 		servers:   make(map[engine.ListenerKey]*srv),
@@ -84,10 +85,10 @@ func New(id int, st stapler.Stapler, o Options) (*mux, error) {
 		stapler:        st,
 	}
 
-	m.router.NotFound = &DefaultNotFound{}
+	m.router.SetNotFound(&DefaultNotFound{})
 	if o.NotFoundMiddleware != nil {
-		if handler, err := o.NotFoundMiddleware.NewHandler(m.router.NotFound); err == nil {
-			m.router.NotFound = handler
+		if handler, err := o.NotFoundMiddleware.NewHandler(m.router.GetNotFound()); err == nil {
+			m.router.SetNotFound(handler)
 		}
 	}
 
@@ -403,11 +404,15 @@ func (m *mux) DeleteBackend(bk engine.BackendKey) error {
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-
 	b, ok := m.backends[bk]
 	if !ok {
 		return &engine.NotFoundError{Message: fmt.Sprintf("%v not found", bk)}
 	}
+
+	//delete backend from being referenced - it is no longer in etcd
+	//and future frontend additions to etcd shouldn't see a
+	//magical backend just because vulcan is holding a reference to it.
+	delete(m.backends, bk)
 
 	if len(b.frontends) != 0 {
 		return fmt.Errorf("%v is used by frontends: %v", b, b.frontends)
@@ -600,6 +605,9 @@ func setDefaults(o Options) Options {
 	}
 	if o.TimeProvider == nil {
 		o.TimeProvider = &timetools.RealTime{}
+	}
+	if o.Router == nil {
+		o.Router = route.NewMux()
 	}
 	return o
 }

@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/oxy/testutils"
-	. "github.com/mailgun/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
-	"github.com/mailgun/vulcand/plugin"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/vulcand/oxy/testutils"
+	. "github.com/vulcand/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
+	"github.com/vulcand/vulcand/plugin"
 )
 
 func TestRL(t *testing.T) { TestingT(t) }
@@ -371,4 +371,24 @@ func (s *RewriteSuite) TestContentLength(c *C) {
 		testutils.Header("X-Header", "bar"))
 
 	c.Assert(re.Header.Get("Content-Length"), Equals, "14")
+}
+
+func (s *RewriteSuite) TestRewritePreserveURIEncoding(c *C) {
+	var outURL string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		outURL = rawURL(req)
+		w.Write([]byte("hello"))
+	})
+
+	rh, err := newRewriteHandler(handler, &Rewrite{"^http://localhost/foo/(.*)", "http://localhost/$1", false, false})
+	c.Assert(rh, NotNil)
+	c.Assert(err, IsNil)
+
+	srv := httptest.NewServer(rh)
+	defer srv.Close()
+
+	re, _, err := testutils.Get(srv.URL+"/foo/bar%20baz", testutils.Host("localhost"))
+	c.Assert(err, IsNil)
+	c.Assert(re.StatusCode, Equals, http.StatusOK)
+	c.Assert(outURL, Equals, "http://localhost/bar%20baz")
 }

@@ -1,8 +1,9 @@
 package command
 
 import (
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
-	"github.com/mailgun/vulcand/engine"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/codegangsta/cli"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/vulcand/route"
+	"github.com/vulcand/vulcand/engine"
 )
 
 func NewFrontendCommand(cmd *Command) cli.Command {
@@ -78,7 +79,7 @@ func (cmd *Command) upsertFrontendAction(c *cli.Context) {
 		cmd.printError(err)
 		return
 	}
-	f, err := engine.NewHTTPFrontend(c.String("id"), c.String("b"), c.String("route"), settings)
+	f, err := engine.NewHTTPFrontend(route.NewMux(), c.String("id"), c.String("b"), c.String("route"), settings)
 	if err != nil {
 		cmd.printError(err)
 		return
@@ -108,6 +109,7 @@ func getFrontendSettings(c *cli.Context) (engine.HTTPFrontendSettings, error) {
 	s.FailoverPredicate = c.String("failoverPredicate")
 	s.Hostname = c.String("forwardHost")
 	s.TrustForwardHeader = c.Bool("trustForwardHeader")
+	s.PassHostHeader = c.Bool("passHostHeader")
 
 	return s, nil
 }
@@ -122,5 +124,6 @@ func frontendOptions() []cli.Flag {
 		cli.StringFlag{Name: "failoverPredicate", Usage: "predicate that defines cases when failover is allowed"},
 		cli.StringFlag{Name: "forwardHost", Usage: "hostname to set when forwarding a request"},
 		cli.BoolFlag{Name: "trustForwardHeader", Usage: "allows copying X-Forwarded-For header value from the original request"},
+		cli.BoolFlag{Name: "passHostHeader", Usage: "allows passing custom headers to the backend servers"},
 	}
 }

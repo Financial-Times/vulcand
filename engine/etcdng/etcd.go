@@ -9,51 +9,67 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/go-etcd/etcd"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/plugin"
-	"github.com/mailgun/vulcand/secret"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/coreos/go-etcd/etcd"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/plugin"
+	"github.com/vulcand/vulcand/secret"
 )
 
 type ng struct {
-	nodes    []string
-	registry *plugin.Registry
-	etcdKey  string
-	client   *etcd.Client
-	cancelC  chan bool
-	stopC    chan bool
-
-	options Options
+	nodes            []string
+	registry         *plugin.Registry
+	etcdKey          string
+	client           *etcd.Client
+	cancelC          chan bool
+	stopC            chan bool
+	syncClusterStopC chan bool
+	logsev           log.Severity
+	options          Options
 }
 
 type Options struct {
-	EtcdConsistency string
-	EtcdCaFile      string
-	EtcdCertFile    string
-	EtcdKeyFile     string
-	Box             *secret.Box
+	EtcdConsistency         string
+	EtcdCaFile              string
+	EtcdCertFile            string
+	EtcdKeyFile             string
+	EtcdSyncIntervalSeconds int64
+	Box                     *secret.Box
 }
 
 func New(nodes []string, etcdKey string, registry *plugin.Registry, options Options) (engine.Engine, error) {
 	n := &ng{
-		nodes:    nodes,
-		registry: registry,
-		etcdKey:  etcdKey,
-		cancelC:  make(chan bool, 1),
-		stopC:    make(chan bool, 1),
-		options:  setDefaults(options),
+		nodes:            nodes,
+		registry:         registry,
+		etcdKey:          etcdKey,
+		cancelC:          make(chan bool, 1),
+		stopC:            make(chan bool, 1),
+		syncClusterStopC: make(chan bool, 1),
+		options:          setDefaults(options),
 	}
 	if err := n.reconnect(); err != nil {
 		return nil, err
+	}
+	if options.EtcdSyncIntervalSeconds > 0 {
+		go n.periodicallySyncCluster(n.syncClusterStopC)
 	}
 	return n, nil
 }
 
 func (s *ng) Close() {
+	s.syncClusterStopC <- true
 	if s.client != nil {
 		s.client.Close()
 	}
+}
+
+func (n *ng) GetLogSeverity() log.Severity {
+	return n.logsev
+}
+
+func (n *ng) SetLogSeverity(sev log.Severity) {
+	n.logsev = sev
+	log.SetSeverity(n.logsev)
 }
 
 func (n *ng) reconnect() error {
@@ -227,7 +243,7 @@ func (n *ng) GetFrontend(key engine.FrontendKey) (*engine.Frontend, error) {
 	if err != nil {
 		return nil, err
 	}
-	return engine.FrontendFromJSON([]byte(bytes), key.Id)
+	return engine.FrontendFromJSON(n.registry.GetRouter(), []byte(bytes), key.Id)
 }
 
 func (n *ng) DeleteFrontend(fk engine.FrontendKey) error {
@@ -429,7 +445,7 @@ func (n *ng) Subscribe(changes chan interface{}, cancelC chan bool) error {
 				return err
 			}
 		}
-		waitIndex = response.Node.ModifiedIndex + 1
+		waitIndex = response.EtcdIndex + 1
 		log.Infof("%s", responseToString(response))
 		change, err := n.parseChange(response)
 		if err != nil {
@@ -717,6 +733,17 @@ func (n *ng) checkKeyExists(key string) error {
 func (n *ng) deleteKey(key string) error {
 	_, err := n.client.Delete(key, true)
 	return convertErr(err)
+}
+
+func (n *ng) periodicallySyncCluster(syncClusterStopC chan bool) {
+	for {
+		select {
+		case <-time.After(time.Duration(n.options.EtcdSyncIntervalSeconds) * time.Second):
+			n.client.SyncCluster()
+		case <-syncClusterStopC:
+			return
+		}
+	}
 }
 
 type Pair struct {

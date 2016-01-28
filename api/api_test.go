@@ -5,19 +5,19 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	oxytest "github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/oxy/testutils"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/engine/memng"
-	"github.com/mailgun/vulcand/plugin/connlimit"
-	"github.com/mailgun/vulcand/plugin/registry"
-	"github.com/mailgun/vulcand/proxy"
-	"github.com/mailgun/vulcand/stapler"
-	"github.com/mailgun/vulcand/supervisor"
-	"github.com/mailgun/vulcand/testutils"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
+	oxytest "github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/vulcand/oxy/testutils"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/engine/memng"
+	"github.com/vulcand/vulcand/plugin/connlimit"
+	"github.com/vulcand/vulcand/plugin/registry"
+	"github.com/vulcand/vulcand/proxy"
+	"github.com/vulcand/vulcand/stapler"
+	"github.com/vulcand/vulcand/supervisor"
+	"github.com/vulcand/vulcand/testutils"
 
-	. "github.com/mailgun/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
+	. "github.com/vulcand/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
 )
 
 func TestApi(t *testing.T) { TestingT(t) }
@@ -31,7 +31,7 @@ type ApiSuite struct {
 var _ = Suite(&ApiSuite{})
 
 func (s *ApiSuite) SetUpSuite(c *C) {
-	log.Init([]*log.LogConfig{&log.LogConfig{Name: "console"}})
+	log.InitWithConfig(log.Config{Name: "console"})
 }
 
 func (s *ApiSuite) SetUpTest(c *C) {
@@ -65,7 +65,7 @@ func (s *ApiSuite) TestStatusV1(c *C) {
 }
 
 func (s *ApiSuite) TestSeverity(c *C) {
-	for _, sev := range []log.Severity{log.SeverityInfo, log.SeverityWarn, log.SeverityError} {
+	for _, sev := range []log.Severity{log.SeverityInfo, log.SeverityWarning, log.SeverityError} {
 		err := s.client.UpdateLogSeverity(sev)
 		c.Assert(err, IsNil)
 		out, err := s.client.GetLogSeverity()
@@ -207,7 +207,7 @@ func (s *ApiSuite) TestFrontendCRUD(c *C) {
 
 	c.Assert(s.client.UpsertBackend(*b), IsNil)
 
-	f, err := engine.NewHTTPFrontend("f1", b.Id, `Path("/")`, engine.HTTPFrontendSettings{})
+	f, err := engine.NewHTTPFrontend(s.ng.GetRegistry().GetRouter(), "f1", b.Id, `Path("/")`, engine.HTTPFrontendSettings{})
 	c.Assert(err, IsNil)
 	fk := engine.FrontendKey{Id: f.Id}
 
@@ -260,7 +260,7 @@ func (s *ApiSuite) TestMiddlewareCRUD(c *C) {
 
 	c.Assert(s.client.UpsertBackend(*b), IsNil)
 
-	f, err := engine.NewHTTPFrontend("f1", b.Id, `Path("/")`, engine.HTTPFrontendSettings{})
+	f, err := engine.NewHTTPFrontend(s.ng.GetRegistry().GetRouter(), "f1", b.Id, `Path("/")`, engine.HTTPFrontendSettings{})
 	c.Assert(err, IsNil)
 	fk := engine.FrontendKey{Id: f.Id}
 

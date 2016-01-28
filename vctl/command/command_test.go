@@ -8,19 +8,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
-	"github.com/mailgun/vulcand/api"
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/engine/memng"
-	"github.com/mailgun/vulcand/plugin/registry"
-	"github.com/mailgun/vulcand/proxy"
-	"github.com/mailgun/vulcand/secret"
-	"github.com/mailgun/vulcand/stapler"
-	"github.com/mailgun/vulcand/supervisor"
-	"github.com/mailgun/vulcand/testutils"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
+	"github.com/vulcand/vulcand/api"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/engine/memng"
+	"github.com/vulcand/vulcand/plugin/registry"
+	"github.com/vulcand/vulcand/proxy"
+	"github.com/vulcand/vulcand/secret"
+	"github.com/vulcand/vulcand/stapler"
+	"github.com/vulcand/vulcand/supervisor"
+	"github.com/vulcand/vulcand/testutils"
 
-	. "github.com/mailgun/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
+	. "github.com/vulcand/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
 )
 
 const OK = ".*OK.*"
@@ -38,7 +38,7 @@ type CmdSuite struct {
 var _ = Suite(&CmdSuite{})
 
 func (s *CmdSuite) SetUpSuite(c *C) {
-	log.Init([]*log.LogConfig{&log.LogConfig{Name: "console"}})
+	log.InitWithConfig(log.Config{Name: "console"})
 }
 
 func (s *CmdSuite) SetUpTest(c *C) {
@@ -116,7 +116,7 @@ func (s *CmdSuite) TestHostCRUD(c *C) {
 }
 
 func (s *CmdSuite) TestLogSeverity(c *C) {
-	for _, sev := range []log.Severity{log.SeverityInfo, log.SeverityWarn, log.SeverityError} {
+	for _, sev := range []log.Severity{log.SeverityInfo, log.SeverityWarning, log.SeverityError} {
 		c.Assert(s.run("log", "set_severity", "-s", sev.String()), Matches, ".*updated.*")
 		c.Assert(s.run("log", "get_severity"), Matches, fmt.Sprintf(".*%v.*", sev))
 	}

@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/go-etcd/etcd"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/engine/test"
-	"github.com/mailgun/vulcand/plugin/registry"
-	"github.com/mailgun/vulcand/secret"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/coreos/go-etcd/etcd"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/engine/test"
+	"github.com/vulcand/vulcand/plugin/registry"
+	"github.com/vulcand/vulcand/secret"
 
-	. "github.com/mailgun/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
+	. "github.com/vulcand/vulcand/Godeps/_workspace/src/gopkg.in/check.v1"
 )
 
 func TestEtcd(t *testing.T) { TestingT(t) }
@@ -34,7 +34,7 @@ var _ = Suite(&EtcdSuite{
 })
 
 func (s *EtcdSuite) SetUpSuite(c *C) {
-	log.Init([]*log.LogConfig{&log.LogConfig{Name: "console"}})
+	log.InitWithConfig(log.Config{Name: "console"})
 
 	key, err := secret.NewKeyString()
 	if err != nil {

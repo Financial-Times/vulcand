@@ -12,19 +12,19 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/go-etcd/etcd"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/manners"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/metrics"
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
-	"github.com/mailgun/vulcand/api"
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/engine/etcdng"
-	"github.com/mailgun/vulcand/plugin"
-	"github.com/mailgun/vulcand/proxy"
-	"github.com/mailgun/vulcand/secret"
-	"github.com/mailgun/vulcand/stapler"
-	"github.com/mailgun/vulcand/supervisor"
+	etcd "github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/coreos/etcd/client"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/manners"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/metrics"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
+	"github.com/vulcand/vulcand/api"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/engine/etcdv2ng"
+	"github.com/vulcand/vulcand/plugin"
+	"github.com/vulcand/vulcand/proxy"
+	"github.com/vulcand/vulcand/secret"
+	"github.com/vulcand/vulcand/stapler"
+	"github.com/vulcand/vulcand/supervisor"
 )
 
 func Run(registry *plugin.Registry) error {
@@ -43,7 +43,7 @@ func Run(registry *plugin.Registry) error {
 }
 
 type Service struct {
-	client        *etcd.Client
+	client        etcd.Client
 	options       Options
 	registry      *plugin.Registry
 	apiApp        *scroll.App
@@ -67,9 +67,10 @@ func NewService(options Options, registry *plugin.Registry) *Service {
 }
 
 func (s *Service) Start() error {
-	log.Init([]*log.LogConfig{&log.LogConfig{Name: s.options.Log}})
-
-	log.SetSeverity(s.options.LogSeverity.s)
+	log.InitWithConfig(log.Config{
+		Name:     s.options.Log,
+		Severity: s.options.LogSeverity.S.String(),
+	})
 
 	log.Infof("Service starts with options: %#v", s.options)
 
@@ -264,16 +265,17 @@ func (s *Service) newEngine() error {
 	if err != nil {
 		return err
 	}
-	ng, err := etcdng.New(
+	ng, err := etcdv2ng.New(
 		s.options.EtcdNodes,
 		s.options.EtcdKey,
 		s.registry,
-		etcdng.Options{
-			EtcdCaFile:      s.options.EtcdCaFile,
-			EtcdCertFile:    s.options.EtcdCertFile,
-			EtcdKeyFile:     s.options.EtcdKeyFile,
-			EtcdConsistency: s.options.EtcdConsistency,
-			Box:             box,
+		etcdv2ng.Options{
+			EtcdCaFile:              s.options.EtcdCaFile,
+			EtcdCertFile:            s.options.EtcdCertFile,
+			EtcdKeyFile:             s.options.EtcdKeyFile,
+			EtcdConsistency:         s.options.EtcdConsistency,
+			EtcdSyncIntervalSeconds: s.options.EtcdSyncIntervalSeconds,
+			Box: box,
 		})
 	if err != nil {
 		return err
@@ -298,20 +300,14 @@ func (s *Service) reportSystemMetrics() {
 
 func (s *Service) newProxy(id int) (proxy.Proxy, error) {
 	return proxy.New(id, s.stapler, proxy.Options{
-		MetricsClient:  s.metricsClient,
-		DialTimeout:    s.options.EndpointDialTimeout,
-		ReadTimeout:    s.options.ServerReadTimeout,
-		WriteTimeout:   s.options.ServerWriteTimeout,
-		MaxHeaderBytes: s.options.ServerMaxHeaderBytes,
-		DefaultListener: &engine.Listener{
-			Id:       "DefaultListener",
-			Protocol: "http",
-			Address: engine.Address{
-				Network: "tcp",
-				Address: fmt.Sprintf("%s:%d", s.options.Interface, s.options.Port),
-			},
-		},
+		MetricsClient:      s.metricsClient,
+		DialTimeout:        s.options.EndpointDialTimeout,
+		ReadTimeout:        s.options.ServerReadTimeout,
+		WriteTimeout:       s.options.ServerWriteTimeout,
+		MaxHeaderBytes:     s.options.ServerMaxHeaderBytes,
+		DefaultListener:    constructDefaultListener(s.options),
 		NotFoundMiddleware: s.registry.GetNotFoundMiddleware(),
+		Router:             s.registry.GetRouter(),
 	})
 }
 
@@ -343,6 +339,20 @@ func (s *Service) startApi(file *proxy.FileDescriptor) error {
 
 	s.apiServer = manners.NewWithOptions(manners.Options{Server: server, Listener: listener})
 	return s.apiServer.ListenAndServe()
+}
+
+func constructDefaultListener(options Options) *engine.Listener {
+	if options.DefaultListener {
+		return &engine.Listener{
+			Id:       "DefaultListener",
+			Protocol: "http",
+			Address: engine.Address{
+				Network: "tcp",
+				Address: fmt.Sprintf("%s:%d", options.Interface, options.Port),
+			},
+		}
+	}
+	return nil
 }
 
 func execPath() (string, error) {

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mailgun/vulcand/engine"
-	"github.com/mailgun/vulcand/plugin"
+	"github.com/vulcand/vulcand/engine"
+	"github.com/vulcand/vulcand/plugin"
 
-	"github.com/mailgun/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
+	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
 )
 
 // Mem is exported to provide easy access to its internals
@@ -21,9 +21,10 @@ type Mem struct {
 	Middlewares map[engine.FrontendKey][]engine.Middleware
 	Servers     map[engine.BackendKey][]engine.Server
 
-	Registry *plugin.Registry
-	ChangesC chan interface{}
-	ErrorsC  chan error
+	Registry    *plugin.Registry
+	ChangesC    chan interface{}
+	ErrorsC     chan error
+	LogSeverity log.Severity
 }
 
 func New(r *plugin.Registry) engine.Engine {
@@ -49,6 +50,15 @@ func (m *Mem) emit(val interface{}) {
 }
 
 func (m *Mem) Close() {
+}
+
+func (m *Mem) GetLogSeverity() log.Severity {
+	return m.LogSeverity
+}
+
+func (m *Mem) SetLogSeverity(sev log.Severity) {
+	m.LogSeverity = sev
+	log.SetSeverity(m.LogSeverity)
 }
 
 func (m *Mem) GetRegistry() *plugin.Registry {
@@ -312,15 +322,16 @@ func (m *Mem) Subscribe(changes chan interface{}, cancelC chan bool) error {
 		case <-cancelC:
 			return nil
 		case change := <-m.ChangesC:
-			log.Infof("Got change: %v", change)
+			log.Infof("Got change channel: %v", change)
 			select {
 			case changes <- change:
+				log.Infof("Got changes from changes channel: %v", changes)
 			case err := <-m.ErrorsC:
-				log.Infof("Returning error: %v", err)
+				log.Infof("Returning error (while reading changes from channel): %v", err)
 				return err
 			}
 		case err := <-m.ErrorsC:
-			log.Infof("Returning error: %v", err)
+			log.Infof("Returning error (before changes channel was acquired.): %v", err)
 			return err
 		}
 	}
