@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log/syslog"
 	"net"
 	"net/http"
 	"os"
@@ -12,11 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	etcd "github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/coreos/etcd/client"
-	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/log"
-	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/manners"
-	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/metrics"
-	"github.com/vulcand/vulcand/Godeps/_workspace/src/github.com/mailgun/scroll"
+	log "github.com/Sirupsen/logrus"
+	logrus_logstash "github.com/Sirupsen/logrus/formatters/logstash"
+	logrus_syslog "github.com/Sirupsen/logrus/hooks/syslog"
+	etcd "github.com/coreos/etcd/client"
+	"github.com/mailgun/manners"
+	"github.com/mailgun/metrics"
+	"github.com/mailgun/scroll"
 	"github.com/vulcand/vulcand/api"
 	"github.com/vulcand/vulcand/engine"
 	"github.com/vulcand/vulcand/engine/etcdv2ng"
@@ -67,10 +70,24 @@ func NewService(options Options, registry *plugin.Registry) *Service {
 }
 
 func (s *Service) Start() error {
-	log.InitWithConfig(log.Config{
-		Name:     s.options.Log,
-		Severity: s.options.LogSeverity.S.String(),
-	})
+	if s.options.Log == "console" {
+		log.SetFormatter(&log.TextFormatter{})
+	} else if s.options.Log == "syslog" {
+		hook, err := logrus_syslog.NewSyslogHook("", "", syslog.LOG_INFO, "")
+		if err != nil {
+			return err
+		}
+		log.SetFormatter(&log.TextFormatter{DisableColors: true})
+		log.AddHook(hook)
+	} else if s.options.Log == "json" {
+		log.SetFormatter(&log.JSONFormatter{})
+	} else if s.options.Log == "logstash" {
+		log.SetFormatter(&logrus_logstash.LogstashFormatter{Type: "logs"})
+	} else {
+		log.Warnf("Invalid logger type %v, fallback to default.", s.options.Log)
+	}
+	log.SetOutput(os.Stdout)
+	log.SetLevel(s.options.LogSeverity.S)
 
 	log.Infof("Service starts with options: %#v", s.options)
 
